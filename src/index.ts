@@ -62,7 +62,7 @@ async function fetchLatestTokenProfiles(): Promise<TokenProfile[]> {
  */
 function isSolanaToken(token: TokenProfile): boolean {
   return token.chainId.toLowerCase() === 'solana' ||
-         (token.url && token.url.startsWith('https://dexscreener.com/solana/'));
+         token.url.startsWith('https://dexscreener.com/solana/');
 }
 
 /**
@@ -156,43 +156,4 @@ async function postToDiscord(tokenDetails: TokenDetails, tokenProfile: TokenProf
  * Process tokens:
  *  - Fetch latest tokens.
  *  - Filter for Solana tokens.
- *  - Check if each token has paid Dex.
- *  - If yes, fetch token details and post to Discord.
- *  - Track alerted token addresses to avoid duplicate notifications.
- */
-async function processTokens() {
-  try {
-    const tokenProfiles = await fetchLatestTokenProfiles();
-    for (const token of tokenProfiles) {
-      if (!isSolanaToken(token)) continue;
-
-      const tokenAddress = token.tokenAddress;
-      if (alertedContracts.has(tokenAddress)) {
-        // Already alerted for this token, skip.
-        continue;
-      }
-
-      // Check if token has paid Dex
-      const paid = await hasDexPaid(tokenAddress);
-      if (paid) {
-        try {
-          const tokenDetails = await fetchTokenDetails(tokenAddress);
-          await postToDiscord(tokenDetails, token);
-          alertedContracts.add(tokenAddress);
-        } catch (error) {
-          console.error(`Error processing token ${tokenAddress}:`, error);
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error in processTokens:', error);
-  }
-}
-
-// Start polling at regular intervals
-setInterval(() => {
-  processTokens();
-}, POLL_INTERVAL_MS);
-
-// Also run immediately on startup
-processTokens();
+ *  - Chec
