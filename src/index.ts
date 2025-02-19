@@ -9,8 +9,8 @@ const DISCORD_WEBHOOK_URL =
 // Base URL for DexScreener API
 const BASE_API_URL = 'https://api.dexscreener.com';
 
-// Polling interval (in milliseconds)
-const POLL_INTERVAL_MS = 5_000;
+// Polling interval (in milliseconds) - set to 60 seconds
+const POLL_INTERVAL_MS = 60_000;
 
 // Keep track of tokens we've already alerted to avoid duplicates
 const alertedContracts = new Set<string>();
@@ -34,6 +34,40 @@ interface Order {
   paymentTimestamp: number;
 }
 
+interface PairData {
+  chainId: string;
+  dexId: string;
+  url: string;
+  pairAddress: string;
+  baseToken: {
+    address: string;
+    name: string;
+    symbol: string;
+  };
+  quoteToken: {
+    address: string;
+    name: string;
+    symbol: string;
+  };
+  txns: {
+    m5: {
+      buys: number;
+      sells: number;
+    };
+    [key: string]: any; // h1, h6, etc.
+  };
+  priceChange: {
+    m5: number;
+    [key: string]: number;
+  };
+  marketCap: number;
+  info: {
+    imageUrl: string;
+    [key: string]: any;
+  };
+  // ... other fields like volume, liquidity, etc.
+}
+
 interface TokenDetails {
   name: string;
   symbol: string;
@@ -46,7 +80,7 @@ interface TokenDetails {
 
 /**
  * Fetch the latest token profiles.
- * Using the correct endpoint: /token-profiles/latest/v1
+ * Using /token-profiles/latest/v1 as per DexScreener docs
  */
 async function fetchLatestTokenProfiles(): Promise<TokenProfile[]> {
   const url = `${BASE_API_URL}/token-profiles/latest/v1`;
@@ -63,8 +97,10 @@ async function fetchLatestTokenProfiles(): Promise<TokenProfile[]> {
  * Check if the token profile is a Solana token.
  */
 function isSolanaToken(token: TokenProfile): boolean {
-  return token.chainId.toLowerCase() === 'solana' ||
-         token.url.startsWith('https://dexscreener.com/solana/');
+  return (
+    token.chainId.toLowerCase() === 'solana' ||
+    token.url.startsWith('https://dexscreener.com/solana/')
+  );
 }
 
 /**
@@ -72,7 +108,6 @@ function isSolanaToken(token: TokenProfile): boolean {
  * Returns true if any order has status "approved".
  */
 async function hasDexPaid(tokenAddress: string): Promise<boolean> {
-  // Ensure we don't add an extra slash in the URL.
   const url = `${BASE_API_URL}/orders/v1/solana/${tokenAddress}`;
   const res = await fetch(url);
   if (!res.ok) {
@@ -80,11 +115,20 @@ async function hasDexPaid(tokenAddress: string): Promise<boolean> {
     return false;
   }
   const orders: Order[] = await res.json();
-  return orders.some(order => order.status === 'approved');
+
+  // Optionally, only consider "recent" orders to skip older tokens:
+  // const cutoff = Date.now() - 10 * 60_000; // last 10 minutes
+  // const recentApproved = orders.find(
+  //   (o) => o.status === 'approved' && o.paymentTimestamp > cutoff
+  // );
+  // return !!recentApproved;
+
+  return orders.some((order) => order.status === 'approved');
 }
 
 /**
  * Fetch detailed token information from token-pairs endpoint.
+ * The response is an array of pairs. We'll pick the first pair (or whichever you prefer).
  */
 async function fetchTokenDetails(tokenAddress: string): Promise<TokenDetails> {
   const url = `${BASE_API_URL}/token-pairs/v1/solana/${tokenAddress}`;
@@ -92,17 +136,25 @@ async function fetchTokenDetails(tokenAddress: string): Promise<TokenDetails> {
   if (!res.ok) {
     throw new Error(`Failed to fetch token details for ${tokenAddress}: ${res.statusText}`);
   }
-  const details = await res.json();
 
-  // Map the response to our TokenDetails interface.
+  const pairs: PairData[] = await res.json();
+  if (!pairs.length) {
+    throw new Error(`No pairs found for token ${tokenAddress}`);
+  }
+
+  // For simplicity, pick the first pair. You could pick the pair with the highest liquidity, etc.
+  const firstPair = pairs[0];
+  const { baseToken, txns, priceChange, marketCap, info } = firstPair;
+
+  // Map the pair data to our TokenDetails interface
   return {
-    name: details.name,
-    symbol: details.symbol,
-    imageUrl: details.imageUrl,
-    marketCap: details.marketCap,
-    m5Buys: details.m5Buys,
-    m5Sells: details.m5Sells,
-    m5PriceChange: details.m5PriceChange,
+    name: baseToken.name,
+    symbol: baseToken.symbol,
+    imageUrl: info.imageUrl,
+    marketCap: marketCap,
+    m5Buys: txns.m5.buys,
+    m5Sells: txns.m5.sells,
+    m5PriceChange: priceChange.m5,
   };
 }
 
@@ -178,6 +230,9 @@ async function processTokens() {
       const paid = await hasDexPaid(tokenAddress);
       if (paid) {
         try {
+          // Optional: If you only want new tokens, you can also check if the
+          // paymentTimestamp is recent. If not, skip. (See commented code in hasDexPaid.)
+
           const tokenDetails = await fetchTokenDetails(tokenAddress);
           await postToDiscord(tokenDetails, token);
           alertedContracts.add(tokenAddress);
@@ -191,7 +246,7 @@ async function processTokens() {
   }
 }
 
-// Start polling at regular intervals
+// Start polling at regular intervals (1 minute)
 setInterval(() => {
   processTokens();
 }, POLL_INTERVAL_MS);
