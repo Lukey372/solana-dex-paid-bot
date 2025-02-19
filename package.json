@@ -1,0 +1,22 @@
+{
+  "name": "solana-dex-paid-bot",
+  "version": "1.0.0",
+  "description": "A TypeScript bot that monitors DexScreener for Solana tokens that have paid Dex and alerts via Discord.",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "build": "tsc"
+  },
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "node-fetch": "^2.6.7",
+    "dotenv": "^16.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^18.11.9",
+    "@types/node-fetch": "^2.6.2",
+    "ts-node": "^10.9.1",
+    "typescript": "^4.8.4"
+  }
+}
