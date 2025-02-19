@@ -46,9 +46,10 @@ interface TokenDetails {
 
 /**
  * Fetch the latest token profiles.
+ * Using the correct endpoint: /token-profiles/latest/v1
  */
 async function fetchLatestTokenProfiles(): Promise<TokenProfile[]> {
-  const url = `${BASE_API_URL}/token-profile/latest/v1`;
+  const url = `${BASE_API_URL}/token-profiles/latest/v1`;
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch token profiles: ${res.statusText}`);
@@ -94,7 +95,6 @@ async function fetchTokenDetails(tokenAddress: string): Promise<TokenDetails> {
   const details = await res.json();
 
   // Map the response to our TokenDetails interface.
-  // Adjust field names as necessary based on the actual API response.
   return {
     name: details.name,
     symbol: details.symbol,
