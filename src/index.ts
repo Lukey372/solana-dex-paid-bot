@@ -3,7 +3,8 @@
 import fetch from 'node-fetch';
 
 // Discord webhook URL (provided)
-const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1341748074539651183/ezyLAzvDWy2mewzLQdQFKCcJw_i-baqpRugUifPdDsKdupCDuWCLRIDcBnF70CQCQ1uR';
+const DISCORD_WEBHOOK_URL =
+  'https://discord.com/api/webhooks/1341748074539651183/ezyLAzvDWy2mewzLQdQFKCcJw_i-baqpRugUifPdDsKdupCDuWCLRIDcBnF70CQCQ1uR';
 
 // Base URL for DexScreener API
 const BASE_API_URL = 'https://api.dexscreener.com';
@@ -127,9 +128,10 @@ async function postToDiscord(tokenDetails: TokenDetails, tokenProfile: TokenProf
       },
       {
         name: 'M5 Price Change',
-        value: tokenDetails.m5PriceChange !== undefined
-          ? `${tokenDetails.m5PriceChange.toFixed(2)}%`
-          : 'N/A',
+        value:
+          tokenDetails.m5PriceChange !== undefined
+            ? `${tokenDetails.m5PriceChange.toFixed(2)}%`
+            : 'N/A',
         inline: true,
       },
     ],
@@ -156,4 +158,43 @@ async function postToDiscord(tokenDetails: TokenDetails, tokenProfile: TokenProf
  * Process tokens:
  *  - Fetch latest tokens.
  *  - Filter for Solana tokens.
- *  - Chec
+ *  - Check if each token has paid Dex.
+ *  - If yes, fetch token details and post to Discord.
+ *  - Track alerted token addresses to avoid duplicate notifications.
+ */
+async function processTokens() {
+  try {
+    const tokenProfiles = await fetchLatestTokenProfiles();
+    for (const token of tokenProfiles) {
+      if (!isSolanaToken(token)) continue;
+
+      const tokenAddress = token.tokenAddress;
+      if (alertedContracts.has(tokenAddress)) {
+        // Already alerted for this token, skip.
+        continue;
+      }
+
+      // Check if token has paid Dex
+      const paid = await hasDexPaid(tokenAddress);
+      if (paid) {
+        try {
+          const tokenDetails = await fetchTokenDetails(tokenAddress);
+          await postToDiscord(tokenDetails, token);
+          alertedContracts.add(tokenAddress);
+        } catch (error) {
+          console.error(`Error processing token ${tokenAddress}:`, error);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in processTokens:', error);
+  }
+}
+
+// Start polling at regular intervals
+setInterval(() => {
+  processTokens();
+}, POLL_INTERVAL_MS);
+
+// Also run immediately on startup
+processTokens();
